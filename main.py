@@ -2,7 +2,7 @@ import os
 import json
 import requests
 
-# comparison function used for incrementing game scores.
+# comparison function used for finding game outcomes.
 # works essentially as a signum function:
 # Returns:
 #   0 if equal
@@ -11,57 +11,88 @@ import requests
 # https://en.wikipedia.org/wiki/Sign_function
 cmp = lambda a, b: (a > b) - (a < b)
 
+# Function used to compile a team's point total
+# Works on the basis that a win is worth 3 points and a draw 1 point.
+# Return value is the point total as a number.
+get_points = lambda team: team["W"] * 3 + team["D"]
+
 # The API is split up as [base_url] / '[year_of_game]' / '[game_date]'
 # The reason I declare the API URL as its own variable is so I can
-# concatenate the base url with other values for specific game information.
-url_base = "http://football-frenzy.s3-website.eu-north-1.amazonaws.com/api"
-req_base = requests.get(url_base)
-data = json.loads(req_base.text)
+# concatenate the base url with other values for specific information retrieval.
+URL_BASE = "http://football-frenzy.s3-website.eu-north-1.amazonaws.com/api"
+REQ_BASE = requests.get(URL_BASE)
+data = json.loads(REQ_BASE.text)
 
 seasons = data["seasons"]
 
 while True:
     os.system("cls") if os.name == "nt" else os.system("clear")
-    print("List | List available seasons.")
-    print("View | View table for season.")
-    print("Quit | Exits the program.")
+    print("List │ List available seasons.")
+    print("View │ View table for season.")
+    print("Quit │ Exits the program.")
 
-    user_input = input("selection > ")
+    user_input = input("selection > ").lower()
 
     if user_input == "list":
-        print(*seasons, sep = '\n')
+        print(*seasons, sep="\n")
 
     elif user_input == "view":
         year = input("Enter year [1980..2018]: ")
 
         if year not in seasons:
             print("Invalid year provided")
+            input("Press enter to continue")
             continue
-            
+
         if year in seasons:
-            url_season  = f"{url_base}/{year}"
-            req_season  = requests.get(url_season)
-            data_season = json.loads(req_season.text)
+            URL_SEASON = f"{URL_BASE}/{year}"
+            REQ_SEASON = requests.get(URL_SEASON)
+            DATA_SEASON = json.loads(REQ_SEASON.text)
 
-            teams = {team:0 for team in data_season["teams"]}
+            teams = {team: {"W": 0, "D": 0, "L": 0} for team in DATA_SEASON["teams"]}
 
-            for game_day in data_season["gamedays"]:
-                url_game_day  = f"{url_base}/{year}/{game_day}"
-                req_game_day  = requests.get(url_game_day)
-                data_game_day = json.loads(req_game_day.text)
+            for game_day in DATA_SEASON["gamedays"]:
+                URL_GAMEDAY = f"{URL_BASE}/{year}/{game_day}"
+                REQ_GAMEDAY = requests.get(URL_GAMEDAY)
+                DATA_GAMEDAY = json.loads(REQ_GAMEDAY.text)
 
-                for game in data_game_day["games"]:
-                    data_team_home = game["score"]["home"]
-                    data_team_away = game["score"]["away"]
+                for game in DATA_GAMEDAY["games"]:
+                    DATA_HOME = game["score"]["home"]
+                    DATA_AWAY = game["score"]["away"]
 
-                    name_team_home = data_team_home["team"]
-                    name_team_away = data_team_away["team"]
+                    TEAM_HOME = DATA_HOME["team"]
+                    TEAM_AWAY = DATA_AWAY["team"]
 
-                    teams[name_team_home] += [0,1,3][cmp(data_team_home["goals"], data_team_away["goals"]) + 1]
-                    teams[name_team_away] += [0,1,3][cmp(data_team_away["goals"], data_team_home["goals"]) + 1]
+                    # cmp returns -1, 0, or 1
+                    # +1 makes the results into 0, 1, 2 which I can use as indeces.
+                    result = cmp(DATA_HOME["goals"], DATA_AWAY["goals"]) + 1
 
-            for key, value in sorted(teams.items()):
-                print(key, value)
+                    teams[TEAM_HOME][["L", "D", "W"][result]] += 1
+                    teams[TEAM_AWAY][["L", "D", "W"][2 - result]] += 1
+
+            name_fill = max([len(team) for team in DATA_SEASON["teams"]])
+
+            print(
+                "Team".ljust(name_fill)
+                + f'  {"W": >3}  {"D": >3}  {"L": >3}  {"P": >3}'
+            )
+
+            print("  ".join(["─" * name_fill, "─" * 3, "─" * 3, "─" * 3, "─" * 3]))
+
+            for key, value in sorted(
+                teams.items(), key=lambda item: get_points(item[1]), reverse=True
+            ):
+                print(
+                    "  ".join(
+                        [
+                            key.ljust(name_fill),
+                            str(value["W"]).rjust(3),
+                            str(value["D"]).rjust(3),
+                            str(value["L"]).rjust(3),
+                            str(get_points(value)).rjust(3),
+                        ]
+                    )
+                )
 
     elif user_input == "quit":
         break
